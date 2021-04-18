@@ -1,8 +1,9 @@
 #Requires -Module AzureADPreview
+#Requires -Module ImportExcel
 
 <#
     .DESCRIPTION
-    This script exports all Privileged Identity Management role assignments to a *.csv file.
+    This script exports all Privileged Identity Management role assignments to a *.xlsx file.
 
 #>
 
@@ -90,21 +91,11 @@ Write-Verbose "Connected to tenant: $($token.AccessToken.TenantId) with user: $(
 #Get all role assignments
 $roleAssignments = Get-NextLevelAzureADDirectoryRoleAssignments
 
-$exportPath = Join-Path $PSScriptRoot "AzureADDirectoryRoleAssignments_$(get-date -f yyyy-MM-dd)_$($($token.AccessToken.UserId).split("@")[1]).csv"
+$excelExportPath = Join-Path "$(Get-Location)" "AzureADDirectoryRoleAssignments_$(get-date -f yyyy-MM-dd)_$($($token.AccessToken.UserId).split("@")[1]).xlsx"
 
-# Export as CSV to current directory
-Write-Verbose -Message "Storing results in $exportPath"
-$roleAssignments | Export-Csv -Path $exportPath -NoTypeInformation -Delimiter ";"
+# Export to Excel sheet to current directory
+$roleAssignments | Export-Excel -Path $excelExportPath -tablestyle medium16 -AutoSize -title "$($($token.AccessToken.UserId).split("@")[1])" -TitleSize 18 -TitleBold -WorksheetName ("PIM Assignments")
+
 
 Write-Output "`nExported role assignments to: '$exportPath'"
 Write-Output $roleAssignments | Format-Table
-
-<# Snippet to compare two different exports
-$firstReport = Import-Csv -Path "AzureADDirectoryRoleAssignments_2020-03-13 - Copy.csv" -Delimiter ";"
-$secondReport = Import-Csv -Path "AzureADDirectoryRoleAssignments_2020-03-13.csv" -Delimiter ";"
-Compare-Object $firstReport $secondReport
-#>
-
-<# snippet to count assignments per role
-$roleAssignments | Group-Object -Property Role | Sort-Object -Descending | Select-Object -Property Name,Count
-#>
