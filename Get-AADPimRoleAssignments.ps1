@@ -1,5 +1,34 @@
-#Requires -Module AzureADPreview
-#Requires -Module importexcel
+<#PSScriptInfo
+
+.VERSION 3.0
+
+.GUID 08feb122-7003-4004-868e-8c0c112fe407
+
+.AUTHOR Raymond Comvalius
+
+.COMPANYNAME 
+
+.COPYRIGHT 
+
+.TAGS 
+
+.LICENSEURI 
+
+.PROJECTURI 
+
+.ICONURI 
+
+.EXTERNALMODULEDEPENDENCIES 
+AzuerADPreview
+importexcel
+
+.REQUIREDSCRIPTS 
+
+.EXTERNALSCRIPTDEPENDENCIES 
+
+.RELEASENOTES
+   
+#>
 
 <#
     .DESCRIPTION
