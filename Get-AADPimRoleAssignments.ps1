@@ -1,5 +1,5 @@
 #Requires -Module AzureADPreview
-#Requires -Module ImportExcel
+#Requires -Module importexcel
 
 <#
     .DESCRIPTION
@@ -8,7 +8,7 @@
 #>
 
 
-function Get-NextLevelAzureADDirectoryRoleAssignments {
+function Get-AADPimRoleAssignments {
     [CmdletBinding()]
     param ()
 
@@ -17,7 +17,15 @@ function Get-NextLevelAzureADDirectoryRoleAssignments {
         $roleAssignments = @()
         $i = 0
         Write-Verbose -Message "Retrieving Privileged Identity Management Role Assignments"
-        $PIMRoleAssignments = Get-AzureADMSPrivilegedRoleAssignment -ProviderId "aadRoles" -ResourceId $token.AccessToken.TenantId
+        Try{
+            $PIMRoleAssignments = Get-AzureADMSPrivilegedRoleAssignment -ProviderId "aadRoles" -ResourceId $token.AccessToken.TenantId
+        }
+        Catch [Microsoft.Open.MSGraphBeta.Client.ApiException]{
+
+            Write-Host "`nError collecting information from Graph API. Please check licensing and privileges." -ForegroundColor Red
+            
+            Exit
+        }
         
         Write-Verbose -Message "Collect information from Assigned Roles collection"
         $PIMRoleAssignments | ForEach-Object {
@@ -33,13 +41,13 @@ function Get-NextLevelAzureADDirectoryRoleAssignments {
 
             # Distinguish between users, groups and service principals
             if ($AADPrincipal.ObjectType -match "ServicePrincipal") {
-                $memberName = "$($AADPrincipal.AppDisplayName) ($($AADPrincipal.AppId))"
+                $AssignedName = "$($AADPrincipal.AppDisplayName) ($($AADPrincipal.AppId))"
             }
             elseif ($AADPrincipal.ObjectType -match "Group") {
-                $memberName = "$($AADPrincipal.DisplayName)"
+                $AssignedName = "$($AADPrincipal.DisplayName)"
             }
             else {   
-                $memberName = "$($AADPrincipal.UserPrincipalName) ($($AADPrincipal.Surname))"
+                $AssignedName = "$($AADPrincipal.UserPrincipalName) ($($AADPrincipal.Givenname) $($AADPrincipal.Surname))"
             }
 
             if(($null -eq $_.EndDateTime) -and ($_.AssignmentState -eq "Active")) { 
@@ -48,14 +56,27 @@ function Get-NextLevelAzureADDirectoryRoleAssignments {
                 $AssignmentState = $_.AssignmentState 
             }
 
-            Write-Verbose -Message "Storing role assigment for $memberName"
+            Write-Verbose -Message "Storing role assigment for $AssignedName"
             $roleAssignments += [PSCustomObject]@{
                 Role       = $AADRole.DisplayName
-                Member     = $memberName
+                Member     = $AssignedName
                 ObjectType = $AADPrincipal.ObjectType
                 AssignmentState = $AssignmentState
+            }
 
-        }
+            if ($AADPrincipal.ObjectType -match "Group") {
+                $GroupMembers = Get-AzureADGroupMember -ObjectId $AADPrincipal.objectId -All $true
+                $GroupMembers | ForEach-Object{
+                    $GroupMemberName = "$($_.UserPrincipalName) ($($_.Givenname) $($_.Surname))"
+
+                    $roleAssignments += [PSCustomObject]@{
+                        Role            = $AADRole.DisplayName
+                        Member          = $GroupMemberName
+                        ObjectType      = "Member of $AssignedName"
+                        AssignmentState = $AssignmentState
+                    }
+                }
+            }
     }
 
     Write-Verbose -Message "Done storing $($PIMRoleAssignments.count) Role Assignments"
@@ -78,7 +99,7 @@ catch [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         Connect-AzureAD
     }
     catch [Microsoft.Open.Azure.AD.CommonLibrary.AadAuthenticationFailedException] {
-        Write-Host "Authentication Failed"
+        Write-Output "Error: Authentication Failed! `n" -ForegroundColor Red
         Exit        
     }
 }
@@ -89,13 +110,15 @@ Write-Verbose "Connected to tenant: $($token.AccessToken.TenantId) with user: $(
 
 
 #Get all role assignments
-$roleAssignments = Get-NextLevelAzureADDirectoryRoleAssignments
+$roleAssignments = Get-AADPimRoleAssignments
 
 $excelExportPath = Join-Path "$(Get-Location)" "AzureADDirectoryRoleAssignments_$(get-date -f yyyy-MM-dd)_$($($token.AccessToken.UserId).split("@")[1]).xlsx"
 
 # Export to Excel sheet to current directory
-$roleAssignments | Export-Excel -Path $excelExportPath -tablestyle medium16 -AutoSize -title "$($($token.AccessToken.UserId).split("@")[1])" -TitleSize 18 -TitleBold -WorksheetName ("PIM Assignments")
+if ($roleAssignments.count -gt 0){
+    $roleAssignments | Export-Excel -Path $excelExportPath -tablestyle medium16 -AutoSize -title "$($($token.AccessToken.UserId).split("@")[1])" -TitleSize 18 -TitleBold -WorksheetName ("PIM Assignments")
 
+    Write-Output $roleAssignments | Format-Table
 
-Write-Output "`nExported role assignments to: '$exportPath'"
-Write-Output $roleAssignments | Format-Table
+    Write-Output "`nExported role assignments to: '$excelExportPath'"
+}
